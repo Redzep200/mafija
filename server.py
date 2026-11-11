@@ -250,6 +250,10 @@ class H(BaseHTTPRequestHandler):
         if not self.authed():
             return self.send(401, {"error": "auth"})
         with LOCK:
+            global GAME
+            if DATABASE_URL:  # serverless: svaki zahtjev čita svježe stanje
+                PLAYERS[:] = load("players", [])
+                GAME = load("game", None)
             try:
                 res = handle(self.path, body)
                 if self.path != "/api/state":
