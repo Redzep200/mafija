@@ -66,12 +66,27 @@ function showLogin(msg) {
 
 function render() {
   const g = S.game;
-  if (!g) { N = null; return renderSetup(); }
-  if (g.phase === 'reveal') return renderReveal(g);
-  if (g.phase === 'leader') return renderLeader(g);
-  if (g.phase === 'night') return renderNight(g);
-  if (g.phase === 'day') return renderDay(g);
-  renderOver(g);
+  if (!g) { N = null; renderSetup(); }
+  else if (g.phase === 'reveal') renderReveal(g);
+  else if (g.phase === 'leader') renderLeader(g);
+  else if (g.phase === 'night') renderNight(g);
+  else if (g.phase === 'day') renderDay(g);
+  else renderOver(g);
+  const bar = document.createElement('div');
+  bar.style.marginTop = '24px';
+  if (!g) {
+    bar.innerHTML = '<button class="sec big" id="rs">Restart stats</button>';
+    $app.appendChild(bar);
+    document.getElementById('rs').onclick = () => {
+      if (confirm('Resetovati statistiku svih igrača na 0?')) act('/api/reset_stats');
+    };
+  } else if (g.phase !== 'over') {
+    bar.innerHTML = '<button class="red big" id="ab">Prekini igru</button>';
+    $app.appendChild(bar);
+    document.getElementById('ab').onclick = () => {
+      if (confirm('Prekinuti igru? Statistika se neće upisati.')) { N = null; revealed = null; votePick = null; act('/api/end'); }
+    };
+  }
 }
 
 function renderSetup() {

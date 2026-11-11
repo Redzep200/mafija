@@ -208,6 +208,12 @@ def handle(path, body):
         GAME = None
         return {}
 
+    if path == "/api/reset_stats":
+        for p in PLAYERS:
+            p["city_wins"] = p["mafia_wins"] = p["games"] = 0
+        save_players(PLAYERS)
+        return {}
+
     raise ValueError("Nepoznato.")
 
 
