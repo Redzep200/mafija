@@ -2,7 +2,8 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY mafija_app.py index.html ./
+COPY mafija_app.py ./
 ENV PORT=7860
 EXPOSE 7860
 CMD ["python", "mafija_app.py"]
+

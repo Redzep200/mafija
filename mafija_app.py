@@ -1,4 +1,4 @@
-import hashlib, json, os, random, secrets, socket, threading
+﻿import hashlib, json, os, random, secrets, socket, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -14,7 +14,7 @@ PORT = int(os.environ.get("PORT", 8000))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DATA = os.path.join(BASE, "data.json")
 LOCK = threading.Lock()
-TOKEN = hashlib.sha256(("mafija-token:" + PASSWORD).encode()).hexdigest()  # stateless, preživi restart
+TOKEN = hashlib.sha256(("mafija-token:" + PASSWORD).encode()).hexdigest()  # stateless, preÅ¾ivi restart
 
 
 def load(key, default):
@@ -107,7 +107,7 @@ def handle(path, body):
         if not name:
             raise ValueError("Unesi ime.")
         if any(p["name"].lower() == name.lower() for p in PLAYERS):
-            raise ValueError("Igrač već postoji.")
+            raise ValueError("IgraÄ veÄ‡ postoji.")
         PLAYERS.append({"id": secrets.token_hex(4), "name": name, "city_wins": 0, "mafia_wins": 0, "games": 0})
         save_players(PLAYERS)
         return {}
@@ -122,9 +122,9 @@ def handle(path, body):
         mafia_n = int(body.get("mafia") or 1)
         chosen = [p for p in PLAYERS if p["id"] in ids]
         if mafia_n < 1:
-            raise ValueError("Minimalno 1 obična mafija.")
+            raise ValueError("Minimalno 1 obiÄna mafija.")
         if len(chosen) < mafia_n + 4:
-            raise ValueError("Premalo igrača: treba bar %d (mafija + dama + doktor + policajac + 1 građanin)." % (mafia_n + 4))
+            raise ValueError("Premalo igraÄa: treba bar %d (mafija + dama + doktor + policajac + 1 graÄ‘anin)." % (mafia_n + 4))
         roles = ["mafia"] * mafia_n + ["dama", "doctor", "police"]
         roles += ["citizen"] * (len(chosen) - len(roles))
         random.shuffle(roles)
@@ -164,15 +164,15 @@ def handle(path, body):
         msg = []
         if k and kill != protect:
             k["alive"] = False
-            msg.append("%s je ubijen/a tokom noći." % k["name"])
+            msg.append("%s je ubijen/a tokom noÄ‡i." % k["name"])
         elif k:
-            msg.append("Mafija je pokušala ubiti %s, ali ga je doktor spasio!" % k["name"])
+            msg.append("Mafija je pokuÅ¡ala ubiti %s, ali ga je doktor spasio!" % k["name"])
         else:
             msg.append("Niko nije ubijen.")
         s = find(silence) if silence else None
         GAME["silenced"] = s["id"] if s and s["alive"] else None
         if GAME["silenced"]:
-            msg.append("%s je ušutkan/a i ne može glasati danas." % s["name"])
+            msg.append("%s je uÅ¡utkan/a i ne moÅ¾e glasati danas." % s["name"])
         GAME["log"] = msg
         GAME["phase"] = "day"
         check_win()
@@ -186,13 +186,13 @@ def handle(path, body):
                 for p in GAME["players"]:
                     if p["role"] == "dama" and p["alive"]:
                         p["role"] = "mafia"
-                        GAME["log"] = ["Obična mafija je izglasana – dama postaje obična mafija!"]
+                        GAME["log"] = ["ObiÄna mafija je izglasana â€“ dama postaje obiÄna mafija!"]
                         break
                 else:
                     GAME["log"] = []
             else:
                 GAME["log"] = []
-            GAME["log"].append("%s je izglasan/a i ispada (%s)." % (t["name"], {"mafia": "mafija", "dama": "dama", "doctor": "doktor", "police": "policajac", "citizen": "građanin"}[t["role"]]))
+            GAME["log"].append("%s je izglasan/a i ispada (%s)." % (t["name"], {"mafia": "mafija", "dama": "dama", "doctor": "doktor", "police": "policajac", "citizen": "graÄ‘anin"}[t["role"]]))
         else:
             GAME["log"] = ["Niko nije izglasan."]
         GAME["silenced"] = None
@@ -228,7 +228,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/":
-            with open(os.path.join(BASE, "index.html"), "rb") as f:
+            with open(os.path.join(BASE, "public", "index.html"), "rb") as f:
                 return self.send(200, f.read(), "text/html")
         if self.path == "/api/state":
             return self.api()
@@ -246,12 +246,12 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/api/login":
             if secrets.compare_digest(str(body.get("password", "")), PASSWORD):
                 return self.send(200, {}, extra={"Set-Cookie": "t=%s; HttpOnly; Path=/; SameSite=Strict; Max-Age=2592000" % TOKEN})
-            return self.send(401, {"error": "Pogrešna šifra."})
+            return self.send(401, {"error": "PogreÅ¡na Å¡ifra."})
         if not self.authed():
             return self.send(401, {"error": "auth"})
         with LOCK:
             global GAME
-            if DATABASE_URL:  # serverless: svaki zahtjev čita svježe stanje
+            if DATABASE_URL:  # serverless: svaki zahtjev Äita svjeÅ¾e stanje
                 PLAYERS[:] = load("players", [])
                 GAME = load("game", None)
             try:
