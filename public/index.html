@@ -133,38 +133,40 @@ function renderLeader(g) {
   document.getElementById('b').onclick = () => act('/api/begin');
 }
 
-const STEPS = ['mafia', 'dama', 'doctor', 'police'];
+const STEPS = ['mafia', 'doctor', 'police'];
 const STEP_INFO = {
-  mafia: ['🔪 Budi se mafija', 'Koga mafija ubija?'],
-  dama: ['💋 Budi se dama (zajedno s mafijom)', 'Koga dama ušutkuje? (može i sebe)'],
+  mafia: ['🔪💋 Budi se mafija (i dama)', 'Koga mafija ubija?'],
   doctor: ['🩺 Budi se doktor', 'Koga doktor štiti?'],
   police: ['👮 Budi se policajac', 'Koga policajac provjerava?'],
 };
 
 function renderNight(g) {
-  if (!N || N.round !== g.round) N = {round: g.round, step: 0, kill: null, silence: null, protect: null, result: null, pick: null};
+  if (!N || N.round !== g.round) N = {round: g.round, step: 0, kill: null, silence: null, protect: null, result: null, pick: null, pick2: null};
   const step = STEPS[N.step];
   const alive = g.players.filter(p => p.alive);
-  const holders = alive.filter(p => step === 'mafia' ? p.role === 'mafia' : p.role === (step === 'dama' ? 'dama' : step));
+  const dama = step === 'mafia' && alive.some(p => p.role === 'dama');
   const [title, q] = STEP_INFO[step];
   const last = N.step === STEPS.length - 1;
   const prev = g.log && g.log.length ? `<div class="card"><small>${g.log.map(esc).join('<br>')}</small></div>` : '';
+  const list = (attr, cur) => alive.map(p => `<button class="pick ${cur === p.id ? 'sel' : ''}" ${attr}="${p.id}">${esc(p.name)}</button>`).join('');
   $app.innerHTML = `<h2>🌙 Noć ${g.round}</h2>${N.step === 0 ? prev : ''}
-  <div class="card"><b>${title}</b><br><small>${holders.length ? '' : 'Ova uloga više nije u igri – glumi poziv i preskoči. '}${q}</small></div>
-  ${alive.map(p => `<button class="pick ${N.pick === p.id ? 'sel' : ''}" data-id="${p.id}">${esc(p.name)}</button>`).join('')}
+  <div class="card"><b>${title}</b><br><small>${q}</small></div>
+  ${list('data-id', N.pick)}
+  ${dama ? `<div class="card"><b>💋 Koga dama ušutkuje?</b><br><small>Može i sebe.</small></div>${list('data-sil', N.pick2)}` : ''}
   ${step === 'police' && N.result !== null ? `<div class="card role ${N.result ? 'mafia' : 'city'}" style="font-size:24px;margin:8px 0">${N.result ? 'JE mafija 👎' : 'NIJE mafija 👍'}</div>` : ''}
   <button class="big" id="next">${last ? 'Završi noć' : 'Dalje'}</button>
   <button class="sec big" id="skip">Preskoči (niko)</button>`;
-  $app.querySelectorAll('.pick').forEach(b => b.onclick = async () => {
+  $app.querySelectorAll('[data-id]').forEach(b => b.onclick = async () => {
     N.pick = b.dataset.id;
     if (step === 'police') N.result = (await api('/api/check', {target: N.pick})).mafia;
     render();
   });
+  $app.querySelectorAll('[data-sil]').forEach(b => b.onclick = () => { N.pick2 = b.dataset.sil; render(); });
   const go = async (skip) => {
     const t = skip ? null : N.pick;
-    if (step === 'mafia') N.kill = t; else if (step === 'dama') N.silence = t;
+    if (step === 'mafia') { N.kill = t; N.silence = N.pick2; }
     else if (step === 'doctor') N.protect = t;
-    N.pick = null; N.result = null;
+    N.pick = null; N.pick2 = null; N.result = null;
     if (last) { const d = {kill: N.kill, silence: N.silence, protect: N.protect}; N = null; await act('/api/resolve', d); }
     else { N.step++; render(); }
   };

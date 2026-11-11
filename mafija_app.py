@@ -1,4 +1,4 @@
-﻿import hashlib, json, os, random, secrets, socket, threading
+import hashlib, json, os, random, secrets, socket, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -14,7 +14,7 @@ PORT = int(os.environ.get("PORT", 8000))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 DATA = os.path.join(BASE, "data.json")
 LOCK = threading.Lock()
-TOKEN = hashlib.sha256(("mafija-token:" + PASSWORD).encode()).hexdigest()  # stateless, preÅ¾ivi restart
+TOKEN = hashlib.sha256(("mafija-token:" + PASSWORD).encode()).hexdigest()  # stateless, preživi restart
 
 
 def load(key, default):
@@ -93,6 +93,14 @@ def check_win():
     save_players(PLAYERS)
 
 
+def promote_dama():
+    for p in GAME["players"]:
+        if p["role"] == "dama" and p["alive"]:
+            p["role"] = "mafia"
+            return True
+    return False
+
+
 def find(pid):
     return next((p for p in GAME["players"] if p["id"] == pid), None)
 
@@ -107,7 +115,7 @@ def handle(path, body):
         if not name:
             raise ValueError("Unesi ime.")
         if any(p["name"].lower() == name.lower() for p in PLAYERS):
-            raise ValueError("IgraÄ veÄ‡ postoji.")
+            raise ValueError("Igrač već postoji.")
         PLAYERS.append({"id": secrets.token_hex(4), "name": name, "city_wins": 0, "mafia_wins": 0, "games": 0})
         save_players(PLAYERS)
         return {}
@@ -122,9 +130,9 @@ def handle(path, body):
         mafia_n = int(body.get("mafia") or 1)
         chosen = [p for p in PLAYERS if p["id"] in ids]
         if mafia_n < 1:
-            raise ValueError("Minimalno 1 obiÄna mafija.")
+            raise ValueError("Minimalno 1 obična mafija.")
         if len(chosen) < mafia_n + 4:
-            raise ValueError("Premalo igraÄa: treba bar %d (mafija + dama + doktor + policajac + 1 graÄ‘anin)." % (mafia_n + 4))
+            raise ValueError("Premalo igrača: treba bar %d (mafija + dama + doktor + policajac + 1 građanin)." % (mafia_n + 4))
         roles = ["mafia"] * mafia_n + ["dama", "doctor", "police"]
         roles += ["citizen"] * (len(chosen) - len(roles))
         random.shuffle(roles)
@@ -164,15 +172,17 @@ def handle(path, body):
         msg = []
         if k and kill != protect:
             k["alive"] = False
-            msg.append("%s je ubijen/a tokom noÄ‡i." % k["name"])
+            msg.append("%s je ubijen/a tokom noći." % k["name"])
+            if k["role"] == "mafia" and promote_dama():
+                msg.append("Mafija je umrla – dama postaje obična mafija!")
         elif k:
-            msg.append("Mafija je pokuÅ¡ala ubiti %s, ali ga je doktor spasio!" % k["name"])
+            msg.append("Mafija je pokušala ubiti %s, ali ga je doktor spasio!" % k["name"])
         else:
             msg.append("Niko nije ubijen.")
         s = find(silence) if silence else None
         GAME["silenced"] = s["id"] if s and s["alive"] else None
         if GAME["silenced"]:
-            msg.append("%s je uÅ¡utkan/a i ne moÅ¾e glasati danas." % s["name"])
+            msg.append("%s je ušutkan/a i ne može glasati danas." % s["name"])
         GAME["log"] = msg
         GAME["phase"] = "day"
         check_win()
@@ -182,17 +192,10 @@ def handle(path, body):
         t = find(body.get("target")) if body.get("target") else None
         if t:
             t["alive"] = False
-            if t["role"] == "mafia":
-                for p in GAME["players"]:
-                    if p["role"] == "dama" and p["alive"]:
-                        p["role"] = "mafia"
-                        GAME["log"] = ["ObiÄna mafija je izglasana â€“ dama postaje obiÄna mafija!"]
-                        break
-                else:
-                    GAME["log"] = []
-            else:
-                GAME["log"] = []
-            GAME["log"].append("%s je izglasan/a i ispada (%s)." % (t["name"], {"mafia": "mafija", "dama": "dama", "doctor": "doktor", "police": "policajac", "citizen": "graÄ‘anin"}[t["role"]]))
+            GAME["log"] = []
+            if t["role"] == "mafia" and promote_dama():
+                GAME["log"].append("Mafija je izglasana – dama postaje obična mafija!")
+            GAME["log"].append("%s je izglasan/a i ispada (%s)." % (t["name"], {"mafia": "mafija", "dama": "dama", "doctor": "doktor", "police": "policajac", "citizen": "građanin"}[t["role"]]))
         else:
             GAME["log"] = ["Niko nije izglasan."]
         GAME["silenced"] = None
@@ -247,12 +250,12 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/api/login":
             if secrets.compare_digest(str(body.get("password", "")), PASSWORD):
                 return self.send(200, {}, extra={"Set-Cookie": "t=%s; HttpOnly; Path=/; SameSite=Strict; Max-Age=2592000" % TOKEN})
-            return self.send(401, {"error": "PogreÅ¡na Å¡ifra."})
+            return self.send(401, {"error": "Pogrešna šifra."})
         if not self.authed():
             return self.send(401, {"error": "auth"})
         with LOCK:
             global GAME
-            if DATABASE_URL:  # serverless: svaki zahtjev Äita svjeÅ¾e stanje
+            if DATABASE_URL:  # serverless: svaki zahtjev čita svježe stanje
                 PLAYERS[:] = load("players", [])
                 GAME = load("game", None)
             try:
