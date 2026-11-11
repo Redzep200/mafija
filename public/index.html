@@ -84,7 +84,7 @@ function render() {
     bar.innerHTML = '<button class="red big" id="ab">Prekini igru</button>';
     $app.appendChild(bar);
     document.getElementById('ab').onclick = () => {
-      if (confirm('Prekinuti igru? Statistika se neće upisati.')) { N = null; revealed = null; votePick = null; act('/api/end'); }
+      if (confirm('Prekinuti igru? Statistika se neće upisati.')) { N = null; revealed = null; votePick = null; handed = false; act('/api/end'); }
     };
   }
 }
@@ -140,12 +140,20 @@ function renderReveal(g) {
   }
 }
 
+let handed = false;
 function renderLeader(g) {
-  $app.innerHTML = `<h2>Svi su izabrali. Vođa, pogledaj uloge:</h2>
+  if (!handed) {
+    $app.innerHTML = `<h2>Svi su izabrali uloge</h2><div class="role">📱➡️👑</div>
+    <small>Predaj telefon vođi.</small>
+    <button class="big" id="h">Predaj vođi</button>`;
+    document.getElementById('h').onclick = () => { handed = true; render(); };
+    return;
+  }
+  $app.innerHTML = `<h2>Vođa, pogledaj uloge:</h2>
   ${g.players.map(p => `<div class="card row"><b>${esc(p.name)}</b>
     <span class="${p.role === 'mafia' || p.role === 'dama' ? 'mafia' : 'city'}">${ROLE_SHORT[p.role]}</span></div>`).join('')}
   <button class="big" id="b">Počni igru (prva noć)</button>`;
-  document.getElementById('b').onclick = () => act('/api/begin');
+  document.getElementById('b').onclick = () => { handed = false; act('/api/begin'); };
 }
 
 const STEPS = ['mafia', 'doctor', 'police'];
