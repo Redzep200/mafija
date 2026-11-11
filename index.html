@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mafija</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:#14121c;color:#eee;padding:16px;max-width:560px;margin:auto}
+h1,h2{text-align:center}
+button{background:#7b2cbf;color:#fff;border:0;border-radius:8px;padding:12px 16px;font-size:16px;margin:4px 0;cursor:pointer}
+button.sec{background:#3a3550}button.red{background:#b3261e}button.big{width:100%;padding:16px}
+button:disabled{opacity:.4}
+input{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid #444;background:#222;color:#fff}
+.card{background:#1f1b2d;border-radius:10px;padding:12px;margin:8px 0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pick{display:block;width:100%;text-align:left;background:#2a2540}
+.pick.sel{background:#2e8b57}
+.role{font-size:40px;text-align:center;margin:30px 0;font-weight:bold}
+.mafia{color:#ff4d4d}.city{color:#4dd2ff}
+.dead{opacity:.45;text-decoration:line-through}
+.err{color:#ff6b6b;text-align:center}
+small{color:#aaa}
+</style>
+</head>
+<body>
+<h1>🕵️ Mafija</h1>
+<div id="app"></div>
+<script>
+const $app = document.getElementById('app');
+const ROLE = {mafia:'🔪 MAFIJA', dama:'💋 DAMA (mafija)', doctor:'🩺 DOKTOR (grad)', police:'👮 POLICAJAC (grad)', citizen:'🏘️ GRAĐANIN (grad)'};
+const ROLE_SHORT = {mafia:'Mafija', dama:'Dama', doctor:'Doktor', police:'Policajac', citizen:'Građanin'};
+let S = null, sel = new Set(), mafiaN = 1, err = '';
+let N = null; // stanje noći
+let revealed = null;
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, body) {
+  const r = await fetch(path, {method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body)});
+  const j = await r.json();
+  if (r.status === 401 && path !== '/api/login') { S = null; return showLogin(); }
+  if (!r.ok) throw new Error(j.error || 'Greška');
+  return j;
+}
+async function act(path, body) {
+  err = '';
+  try { await api(path, body || {}); } catch (e) { err = e.message; }
+  await refresh();
+}
+async function refresh() {
+  try { S = await api('/api/state'); } catch (e) { return; }
+  if (S) render();
+}
+
+function showLogin(msg) {
+  $app.innerHTML = `<div class="card"><h2>Šifra</h2><input id="pw" type="password" placeholder="Unesi šifru" autofocus>
+  <button class="big" id="go">Uđi</button><p class="err">${msg || ''}</p></div>`;
+  const go = async () => {
+    try { await api('/api/login', {password: document.getElementById('pw').value}); refresh(); }
+    catch (e) { showLogin(e.message); }
+  };
+  document.getElementById('go').onclick = go;
+  document.getElementById('pw').onkeydown = e => { if (e.key === 'Enter') go(); };
+}
+
+function render() {
+  const g = S.game;
+  if (!g) { N = null; return renderSetup(); }
+  if (g.phase === 'reveal') return renderReveal(g);
+  if (g.phase === 'leader') return renderLeader(g);
+  if (g.phase === 'night') return renderNight(g);
+  if (g.phase === 'day') return renderDay(g);
+  renderOver(g);
+}
+
+function renderSetup() {
+  const ps = S.players;
+  $app.innerHTML = `
+  <h2>Igrači</h2>
+  <div class="card row"><input id="nm" placeholder="Ime novog igrača"><button id="add">Dodaj</button></div>
+  ${ps.map(p => `<div class="card row">
+    <label style="flex:1"><input type="checkbox" style="width:auto" data-id="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
+    <b>${esc(p.name)}</b><br><small>Grad pobjede: ${p.city_wins || 0} · Mafija pobjede: ${p.mafia_wins || 0} · Igara: ${p.games || 0}</small></label>
+    <button class="red" data-del="${p.id}">✕</button></div>`).join('') || '<p style="text-align:center"><small>Nema igrača. Dodaj ih iznad.</small></p>'}
+  <div class="card"><div class="row"><span>Broj obične mafije (uz damu)</span>
+    <input id="mf" type="number" min="1" value="${mafiaN}" style="width:80px"></div>
+    <small>Uvijek je 1 dama, 1 doktor, 1 policajac. Igrača: ${sel.size}</small></div>
+  <button class="big" id="start">Počni igru</button><p class="err">${esc(err)}</p>`;
+  document.getElementById('add').onclick = () => {
+    const el = document.getElementById('nm');
+    act('/api/add', {name: el.value});
+  };
+  document.getElementById('nm').onkeydown = e => { if (e.key === 'Enter') document.getElementById('add').click(); };
+  $app.querySelectorAll('input[data-id]').forEach(c => c.onchange = () => {
+    c.checked ? sel.add(c.dataset.id) : sel.delete(c.dataset.id); render();
+  });
+  $app.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    const p = ps.find(x => x.id === b.dataset.del);
+    if (confirm('Obrisati ' + p.name + '?')) { sel.delete(p.id); act('/api/delete', {id: p.id}); }
+  });
+  document.getElementById('mf').onchange = e => { mafiaN = parseInt(e.target.value) || 1; };
+  document.getElementById('start').onclick = () => {
+    mafiaN = parseInt(document.getElementById('mf').value) || 1;
+    const ids = S.players.filter(p => sel.has(p.id)).map(p => p.id);
+    revealed = null;
+    act('/api/start', {ids, mafia: mafiaN});
+  };
+}
+
+function renderReveal(g) {
+  const p = g.players[g.reveal_idx];
+  if (revealed === null) {
+    $app.innerHTML = `<h2>Daj telefon igraču</h2><div class="role">${esc(p.name)}</div>
+    <small>Ostali ne gledaju! (${g.reveal_idx + 1}/${g.players.length})</small>
+    <button class="big" id="show">Prikaži moju ulogu</button>`;
+    document.getElementById('show').onclick = async () => {
+      revealed = (await api('/api/reveal', {})).role; render();
+    };
+  } else {
+    const m = revealed === 'mafia' || revealed === 'dama';
+    $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role ${m ? 'mafia' : 'city'}">${ROLE[revealed]}</div>
+    <button class="big" id="hide">Sakrij i dalje</button>`;
+    document.getElementById('hide').onclick = () => { revealed = null; act('/api/reveal_next'); };
+  }
+}
+
+function renderLeader(g) {
+  $app.innerHTML = `<h2>Svi su izabrali. Vođa, pogledaj uloge:</h2>
+  ${g.players.map(p => `<div class="card row"><b>${esc(p.name)}</b>
+    <span class="${p.role === 'mafia' || p.role === 'dama' ? 'mafia' : 'city'}">${ROLE_SHORT[p.role]}</span></div>`).join('')}
+  <button class="big" id="b">Počni igru (prva noć)</button>`;
+  document.getElementById('b').onclick = () => act('/api/begin');
+}
+
+const STEPS = ['mafia', 'dama', 'doctor', 'police'];
+const STEP_INFO = {
+  mafia: ['🔪 Budi se mafija', 'Koga mafija ubija?'],
+  dama: ['💋 Budi se dama (zajedno s mafijom)', 'Koga dama ušutkuje? (može i sebe)'],
+  doctor: ['🩺 Budi se doktor', 'Koga doktor štiti?'],
+  police: ['👮 Budi se policajac', 'Koga policajac provjerava?'],
+};
+
+function renderNight(g) {
+  if (!N || N.round !== g.round) N = {round: g.round, step: 0, kill: null, silence: null, protect: null, result: null, pick: null};
+  const step = STEPS[N.step];
+  const alive = g.players.filter(p => p.alive);
+  const holders = alive.filter(p => step === 'mafia' ? p.role === 'mafia' : p.role === (step === 'dama' ? 'dama' : step));
+  const [title, q] = STEP_INFO[step];
+  const last = N.step === STEPS.length - 1;
+  const prev = g.log && g.log.length ? `<div class="card"><small>${g.log.map(esc).join('<br>')}</small></div>` : '';
+  $app.innerHTML = `<h2>🌙 Noć ${g.round}</h2>${N.step === 0 ? prev : ''}
+  <div class="card"><b>${title}</b><br><small>${holders.length ? '' : 'Ova uloga više nije u igri – glumi poziv i preskoči. '}${q}</small></div>
+  ${alive.map(p => `<button class="pick ${N.pick === p.id ? 'sel' : ''}" data-id="${p.id}">${esc(p.name)}</button>`).join('')}
+  ${step === 'police' && N.result !== null ? `<div class="card role ${N.result ? 'mafia' : 'city'}" style="font-size:24px;margin:8px 0">${N.result ? 'JE mafija 👎' : 'NIJE mafija 👍'}</div>` : ''}
+  <button class="big" id="next">${last ? 'Završi noć' : 'Dalje'}</button>
+  <button class="sec big" id="skip">Preskoči (niko)</button>`;
+  $app.querySelectorAll('.pick').forEach(b => b.onclick = async () => {
+    N.pick = b.dataset.id;
+    if (step === 'police') N.result = (await api('/api/check', {target: N.pick})).mafia;
+    render();
+  });
+  const go = async (skip) => {
+    const t = skip ? null : N.pick;
+    if (step === 'mafia') N.kill = t; else if (step === 'dama') N.silence = t;
+    else if (step === 'doctor') N.protect = t;
+    N.pick = null; N.result = null;
+    if (last) { const d = {kill: N.kill, silence: N.silence, protect: N.protect}; N = null; await act('/api/resolve', d); }
+    else { N.step++; render(); }
+  };
+  document.getElementById('next').onclick = () => go(false);
+  document.getElementById('skip').onclick = () => go(true);
+}
+
+let votePick = null;
+function renderDay(g) {
+  const alive = g.players.filter(p => p.alive);
+  const sil = g.silenced ? g.players.find(p => p.id === g.silenced) : null;
+  $app.innerHTML = `<h2>☀️ Dan ${g.round}</h2>
+  <div class="card">${g.log.map(esc).join('<br>')}</div>
+  ${sil ? `<div class="card">🤐 <b>${esc(sil.name)}</b> ne može glasati.</div>` : ''}
+  <h3>Ko je izglasan?</h3>
+  ${alive.map(p => `<button class="pick ${votePick === p.id ? 'sel' : ''}" data-id="${p.id}">${esc(p.name)}</button>`).join('')}
+  <button class="big" id="ok">Potvrdi glasanje</button>
+  <button class="sec big" id="none">Niko nije izglasan</button>
+  <h3>Pregled uloga (vođa)</h3>
+  ${g.players.map(p => `<div class="card row ${p.alive ? '' : 'dead'}"><b>${esc(p.name)}</b><span class="${p.role === 'mafia' || p.role === 'dama' ? 'mafia' : 'city'}">${ROLE_SHORT[p.role]}</span></div>`).join('')}`;
+  $app.querySelectorAll('.pick').forEach(b => b.onclick = () => { votePick = b.dataset.id; render(); });
+  document.getElementById('ok').onclick = () => { const t = votePick; votePick = null; act('/api/vote', {target: t}); };
+  document.getElementById('none').onclick = () => { votePick = null; act('/api/vote', {target: null}); };
+}
+
+function renderOver(g) {
+  $app.innerHTML = `<h2>Kraj igre</h2>
+  <div class="role ${g.winner === 'mafia' ? 'mafia' : 'city'}">${g.winner === 'mafia' ? '🔪 Mafija pobjeđuje!' : '🏘️ Grad pobjeđuje!'}</div>
+  <div class="card">${(g.log || []).map(esc).join('<br>')}</div>
+  ${g.players.map(p => `<div class="card row ${p.alive ? '' : 'dead'}"><b>${esc(p.name)}</b><span>${ROLE_SHORT[p.role]}</span></div>`).join('')}
+  <button class="big" id="e">Nova igra</button>`;
+  document.getElementById('e').onclick = () => act('/api/end');
+}
+
+refresh().then(() => { if (!S) showLogin(); });
+</script>
+</body>
+</html>
