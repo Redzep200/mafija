@@ -227,12 +227,13 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_GET(self):
-        if self.path == "/":
+        p = self.path.split("?")[0]
+        if p == "/api/state":
+            return self.api()
+        if not p.startswith("/api/"):
             with open(os.path.join(BASE, "public", "index.html"), "rb") as f:
                 return self.send(200, f.read(), "text/html")
-        if self.path == "/api/state":
-            return self.api()
-        self.send(404, {"error": "404"})
+        self.send(404, {"error": "404", "path": self.path})
 
     def do_POST(self):
         self.api()
