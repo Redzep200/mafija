@@ -21,9 +21,40 @@ input{width:100%;padding:12px;font-size:16px;border-radius:8px;border:1px solid 
 .dead{opacity:.45;text-decoration:line-through}
 .err{color:#ff6b6b;text-align:center}
 small{color:#aaa}
+body{transition:background .8s}
+body.night{background:#0a0d1f}body.day{background:#2a2540}
+#sky{position:fixed;top:10px;left:14px;font-size:34px;pointer-events:none;z-index:5;transition:opacity .6s}
+#sky.pop{animation:skyIn 1s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes skyIn{from{transform:translateY(-60px) rotate(-60deg) scale(.4);opacity:0}to{transform:none;opacity:1}}
+button{transition:transform .12s,background .25s,filter .2s}
+button:active{transform:scale(.95)}
+.pick:hover{filter:brightness(1.15)}
+.pick.sel{animation:selPop .25s}
+@keyframes selPop{50%{transform:scale(1.04)}}
+.enter>*{animation:rise .45s both;animation-delay:calc(var(--i,0)*45ms)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.flip{animation:flip .8s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes flip{from{transform:perspective(600px) rotateY(90deg) scale(.6);opacity:0}to{transform:perspective(600px) rotateY(0);opacity:1}}
+.glow-mafia{text-shadow:0 0 18px #ff1f1f,0 0 40px #a00}
+.glow-city{text-shadow:0 0 18px #4dd2ff,0 0 40px #07a}
+.donkey{display:inline-block;animation:hop .45s ease-in-out 2}
+@keyframes hop{50%{transform:translateY(-22px) rotate(-10deg)}}
+.dead{opacity:.45;filter:grayscale(1)}
+.enter .dead{animation:fade 1s .3s both}
+@keyframes fade{from{opacity:1;filter:none}to{opacity:.45;filter:grayscale(1)}}
+.enter .shake{animation:shake .6s .4s}
+.enter .flip{animation:flip .8s cubic-bezier(.2,.9,.3,1.2) both}
+.flip{animation:none}
+@keyframes shake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+.pulse-mafia{animation:pulseM 1.2s ease-in-out infinite}
+@keyframes pulseM{50%{transform:scale(1.07);text-shadow:0 0 30px #f00}}
+.conf{position:fixed;top:-20px;width:10px;height:14px;z-index:9;pointer-events:none;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
+<div id="sky"></div>
 <h1>🕵️ Mafija</h1>
 <div id="app"></div>
 <script>
@@ -67,6 +98,35 @@ function showLogin(msg) {
   document.getElementById('pw').onkeydown = e => { if (e.key === 'Enter') go(); };
 }
 
+let lastKey = null;
+function confetti() {
+  const cols = ['#4dd2ff', '#ffd24d', '#7b2cbf', '#2e8b57', '#ff6b9d'];
+  for (let i = 0; i < 60; i++) {
+    const d = document.createElement('div');
+    d.className = 'conf';
+    d.style.left = Math.random() * 100 + 'vw';
+    d.style.background = cols[i % cols.length];
+    d.style.animationDuration = (2 + Math.random() * 2.5) + 's';
+    d.style.animationDelay = Math.random() * .8 + 's';
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 5500);
+  }
+}
+function decorate(g) {
+  const phase = g ? g.phase : 'setup';
+  const key = [phase, g && g.round, g && g.reveal_idx, revealed !== null, handed, N && N.step, donkeyShownFor].join('|');
+  const sky = document.getElementById('sky');
+  const mode = phase === 'night' ? 'night' : phase === 'day' ? 'day' : '';
+  document.body.className = mode;
+  const icon = mode === 'night' ? '🌙' : mode === 'day' ? '☀️' : '';
+  if (sky.textContent !== icon) { sky.textContent = icon; sky.classList.remove('pop'); void sky.offsetWidth; if (icon) sky.classList.add('pop'); }
+  if (key === lastKey) { $app.classList.remove('enter'); return; }
+  lastKey = key;
+  [...$app.children].forEach((c, i) => c.style.setProperty('--i', Math.min(i, 12)));
+  $app.classList.remove('enter'); void $app.offsetWidth; $app.classList.add('enter');
+  if (phase === 'over') { if (g.winner === 'city') confetti(); }
+}
+
 function render() {
   const g = S.game;
   if (!g) { N = null; renderSetup(); }
@@ -75,6 +135,7 @@ function render() {
   else if (g.phase === 'night') renderNight(g);
   else if (g.phase === 'day') renderDay(g);
   else renderOver(g);
+  decorate(g);
   const bar = document.createElement('div');
   bar.style.marginTop = '24px';
   if (!g) {
@@ -137,11 +198,11 @@ function renderReveal(g) {
       revealed = (await api('/api/reveal', {})).role; render();
     };
   } else if (p.name.trim().toLowerCase() === 'nihad' && donkeyShownFor !== p.id) {
-    $app.innerHTML = `<h2>${esc(p.name)}</h2>    <div class="role">🫏 Magarac</div>`;
+    $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role"><span class="donkey">🫏</span> Magarac</div>`;
     setTimeout(() => { donkeyShownFor = p.id; render(); }, 1000);
   } else {
     const m = revealed === 'mafia' || revealed === 'dama';
-    $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role ${m ? 'mafia' : 'city'}">${ROLE[revealed]}</div>
+    $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role flip ${m ? 'mafia glow-mafia' : 'city glow-city'}">${ROLE[revealed]}</div>
     <button class="big" id="hide">Sakrij i dalje</button>`;
     document.getElementById('hide').onclick = () => { revealed = null; act('/api/reveal_next'); };
   }
@@ -210,7 +271,7 @@ function renderDay(g) {
   const sil = g.silenced ? g.players.find(p => p.id === g.silenced) : null;
   $app.innerHTML = `<h2>☀️ Dan ${g.round}</h2>
   <div class="card">${g.log.map(esc).join('<br>')}</div>
-  ${sil ? `<div class="card">🤐 <b>${esc(sil.name)}</b> ne može glasati.</div>` : ''}
+  ${sil ? `<div class="card shake">🤐 <b>${esc(sil.name)}</b> ne može glasati.</div>` : ''}
   <h3>Ko je izglasan?</h3>
   ${alive.map(p => `<button class="pick ${votePick === p.id ? 'sel' : ''}" data-id="${p.id}">${esc(p.name)}</button>`).join('')}
   <button class="big" id="ok">Potvrdi glasanje</button>
@@ -224,7 +285,7 @@ function renderDay(g) {
 
 function renderOver(g) {
   $app.innerHTML = `<h2>Kraj igre</h2>
-  <div class="role ${g.winner === 'mafia' ? 'mafia' : 'city'}">${g.winner === 'mafia' ? '🔪 Mafija pobjeđuje!' : '🏘️ Grad pobjeđuje!'}</div>
+  <div class="role ${g.winner === 'mafia' ? 'mafia pulse-mafia' : 'city'}">${g.winner === 'mafia' ? '🔪 Mafija pobjeđuje!' : '🏘️ Grad pobjeđuje!'}</div>
   <div class="card">${(g.log || []).map(esc).join('<br>')}</div>
   ${g.players.map(p => `<div class="card row ${p.alive ? '' : 'dead'}"><b>${esc(p.name)}</b><span>${ROLE_SHORT[p.role]}</span></div>`).join('')}
   <button class="big" id="e">Nova igra</button>`;
