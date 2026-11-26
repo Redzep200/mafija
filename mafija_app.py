@@ -17,14 +17,25 @@ LOCK = threading.Lock()
 TOKEN = hashlib.sha256(("mafija-token:" + PASSWORD).encode()).hexdigest()  # stateless, preživi restart
 
 
+CONN = None  # jedna konekcija po zahtjevu (spora konekcija na Neon je glavni uzrok kašnjenja)
+
+
+def db_open():
+    import psycopg2
+    return psycopg2.connect(DATABASE_URL)
+
+
+def load_many(keys):
+    cur = CONN.cursor()
+    cur.execute("SELECT key, value FROM kv WHERE key = ANY(%s)", (list(keys),))
+    rows = dict(cur.fetchall())
+    return {k: json.loads(rows[k]) if k in rows else None for k in keys}
+
+
 def load(key, default):
     if DATABASE_URL:
-        import psycopg2
-        with psycopg2.connect(DATABASE_URL) as c, c.cursor() as cur:
-            cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)")
-            cur.execute("SELECT value FROM kv WHERE key=%s", (key,))
-            row = cur.fetchone()
-            return json.loads(row[0]) if row else default
+        v = load_many([key])[key]
+        return default if v is None else v
     if os.path.exists(DATA):
         with open(DATA, encoding="utf-8") as f:
             return json.load(f).get(key, default)
@@ -33,11 +44,10 @@ def load(key, default):
 
 def save(key, val):
     if DATABASE_URL:
-        import psycopg2
-        with psycopg2.connect(DATABASE_URL) as c, c.cursor() as cur:
-            cur.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)")
-            cur.execute("INSERT INTO kv VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-                        (key, json.dumps(val, ensure_ascii=False)))
+        cur = CONN.cursor()
+        cur.execute("INSERT INTO kv VALUES (%s,%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+                    (key, json.dumps(val, ensure_ascii=False)))
+        CONN.commit()
         return
     d = {}
     if os.path.exists(DATA):
@@ -52,8 +62,15 @@ def save_players(p):
     save("players", p)
 
 
-PLAYERS = load("players", [])
-GAME = load("game", None)  # trenutna igra
+if DATABASE_URL:
+    PLAYERS, GAME = [], None
+    _c = db_open()
+    _c.cursor().execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)")
+    _c.commit()
+    _c.close()
+else:
+    PLAYERS = load("players", [])
+    GAME = load("game", None)  # trenutna igra
 
 
 def is_mafia(role):
@@ -260,17 +277,24 @@ class H(BaseHTTPRequestHandler):
         if not self.authed():
             return self.send(401, {"error": "auth"})
         with LOCK:
-            global GAME
-            if DATABASE_URL:  # serverless: svaki zahtjev čita svježe stanje
-                PLAYERS[:] = load("players", [])
-                GAME = load("game", None)
+            global GAME, CONN
             try:
+                if DATABASE_URL:  # serverless: svaki zahtjev čita svježe stanje
+                    CONN = db_open()
+                    d = load_many(["players", "game"])
+                    PLAYERS[:] = d["players"] or []
+                    GAME = d["game"]
                 res = handle(self.path, body)
-                if self.path != "/api/state":
+                if self.path not in ("/api/state", "/api/reveal", "/api/check"):
                     save("game", GAME)
+                    res = dict(res, state=handle("/api/state", {}))
                 self.send(200, res)
             except Exception as e:
                 self.send(400, {"error": str(e)})
+            finally:
+                if CONN:
+                    CONN.close()
+                    CONN = None
 
 
 if __name__ == "__main__":

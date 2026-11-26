@@ -45,7 +45,10 @@ async function api(path, body) {
 }
 async function act(path, body) {
   err = '';
-  try { await api(path, body || {}); } catch (e) { err = e.message; }
+  try {
+    const r = await api(path, body || {});
+    if (r && r.state) { S = r.state; render(); return; }
+  } catch (e) { err = e.message; }
   await refresh();
 }
 async function refresh() {
