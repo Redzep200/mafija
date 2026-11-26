@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mafija</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#14121c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mafija">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,sans-serif;background:#14121c;color:#eee;padding:16px;max-width:560px;margin:auto}
@@ -168,7 +175,13 @@ function render() {
 
 function renderSetup() {
   const ps = S.players;
-  $app.innerHTML = `
+  const rank = [...ps].map(p => ({...p, w: (p.city_wins || 0) + (p.mafia_wins || 0), g: p.games || 0}))
+    .filter(p => p.g > 0).sort((a, b) => b.w - a.w || (b.w / b.g) - (a.w / a.g) || a.g - b.g);
+  const medal = i => ['🥇', '🥈', '🥉'][i] || (i + 1) + '.';
+  const board = rank.length ? `<div class="card"><h3 style="margin:0 0 8px;text-align:center">🏆 Ljestvica</h3>
+    ${rank.map((p, i) => `<div class="row" style="padding:4px 0"><span>${medal(i)} <b>${esc(p.name)}</b></span>
+    <small>${p.w} pobjeda / ${p.g} igara (${Math.round(100 * p.w / p.g)}%) · 🏘️ ${p.city_wins || 0} · 🔪 ${p.mafia_wins || 0}</small></div>`).join('')}</div>` : '';
+  $app.innerHTML = board + `
   <h2>Igrači</h2>
   <div class="card row"><input id="nm" placeholder="Ime novog igrača"><button id="add">Dodaj</button></div>
   ${ps.map(p => `<div class="card row">

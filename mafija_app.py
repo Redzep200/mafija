@@ -261,8 +261,14 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/state":
             return self.api()
         if not p.startswith("/api/"):
-            with open(os.path.join(BASE, "public", "index.html"), "rb") as f:
-                return self.send(200, f.read(), "text/html")
+            pub = os.path.join(BASE, "public")
+            f = os.path.normpath(os.path.join(pub, p.lstrip("/")))
+            if p != "/" and f.startswith(pub + os.sep) and os.path.isfile(f):
+                ct = {".json": "application/json", ".png": "image/png", ".html": "text/html"}.get(os.path.splitext(f)[1], "application/octet-stream")
+                with open(f, "rb") as fh:
+                    return self.send(200, fh.read(), ct)
+            with open(os.path.join(pub, "index.html"), "rb") as fh:
+                return self.send(200, fh.read(), "text/html")
         self.send(404, {"error": "404", "path": self.path})
 
     def do_POST(self):
