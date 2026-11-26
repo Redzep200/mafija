@@ -162,6 +162,16 @@ def handle(path, body):
         }
         return {}
 
+    if path == "/api/reset_stats":
+        for p in PLAYERS:
+            p["city_wins"] = p["mafia_wins"] = p["games"] = 0
+        save_players(PLAYERS)
+        return {}
+
+    if path == "/api/end":
+        GAME = None
+        return {}
+
     if not GAME:
         raise ValueError("Nema aktivne igre.")
 
@@ -223,16 +233,6 @@ def handle(path, body):
         GAME["round"] += 1
         GAME["phase"] = "night"
         check_win()
-        return {}
-
-    if path == "/api/end":
-        GAME = None
-        return {}
-
-    if path == "/api/reset_stats":
-        for p in PLAYERS:
-            p["city_wins"] = p["mafia_wins"] = p["games"] = 0
-        save_players(PLAYERS)
         return {}
 
     raise ValueError("Nepoznato.")
