@@ -176,7 +176,7 @@ function render() {
 function renderSetup() {
   const ps = S.players;
   const rank = [...ps].map(p => ({...p, w: (p.city_wins || 0) + (p.mafia_wins || 0), g: p.games || 0}))
-    .filter(p => p.g > 0).sort((a, b) => b.w - a.w || (b.w / b.g) - (a.w / a.g) || a.g - b.g);
+    .filter(p => p.g > 0).sort((a, b) => b.w - a.w || (b.w / b.g) - (a.w / a.g) || a.g - b.g).slice(0, 3);
   const medal = i => ['🥇', '🥈', '🥉'][i] || (i + 1) + '.';
   const board = rank.length ? `<div class="card"><h3 style="margin:0 0 8px;text-align:center">🏆 Ljestvica</h3>
     ${rank.map((p, i) => `<div class="row" style="padding:4px 0"><span>${medal(i)} <b>${esc(p.name)}</b></span>
