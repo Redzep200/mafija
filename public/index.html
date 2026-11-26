@@ -123,6 +123,7 @@ function renderSetup() {
   };
 }
 
+let donkeyShownFor = null;
 function renderReveal(g) {
   const p = g.players[g.reveal_idx];
   if (revealed === null) {
@@ -132,6 +133,10 @@ function renderReveal(g) {
     document.getElementById('show').onclick = async () => {
       revealed = (await api('/api/reveal', {})).role; render();
     };
+  } else if (p.name.trim().toLowerCase() === 'nihad' && donkeyShownFor !== p.id) {
+    $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role">🫏 Magarac</div>
+    <button class="big" id="dk">Prikaži moju ulogu</button>`;
+    document.getElementById('dk').onclick = () => { donkeyShownFor = p.id; render(); };
   } else {
     const m = revealed === 'mafia' || revealed === 'dama';
     $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role ${m ? 'mafia' : 'city'}">${ROLE[revealed]}</div>
