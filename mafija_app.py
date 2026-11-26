@@ -187,13 +187,16 @@ def handle(path, body):
         kill, silence, protect = body.get("kill"), body.get("silence"), body.get("protect")
         k = find(kill) if kill else None
         msg = []
+        GAME["event"] = "none"
         if k and kill != protect:
+            GAME["event"] = "kill"
             k["alive"] = False
             msg.append("%s je ubijen/a tokom noći." % k["name"])
             if k["role"] == "mafia" and promote_dama():
                 msg.append("Mafija je umrla – dama postaje obična mafija!")
         elif k:
-            msg.append("Mafija je pokušala ubiti %s, ali ga je doktor spasio!" % k["name"])
+            GAME["event"] = "save"
+            msg.append("Desio se pokušaj ubistva.")
         else:
             msg.append("Niko nije ubijen.")
         s = find(silence) if silence else None
@@ -216,6 +219,7 @@ def handle(path, body):
         else:
             GAME["log"] = ["Niko nije izglasan."]
         GAME["silenced"] = None
+        GAME["event"] = None
         GAME["round"] += 1
         GAME["phase"] = "night"
         check_win()

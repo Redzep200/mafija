@@ -43,6 +43,10 @@ button:active{transform:scale(.95)}
 .enter .dead{animation:fade 1s .3s both}
 @keyframes fade{from{opacity:1;filter:none}to{opacity:.45;filter:grayscale(1)}}
 .enter .shake{animation:shake .6s .4s}
+.fx{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;pointer-events:none;font-size:140px;animation:fxIn 2s ease-out forwards}
+.fx.kill{background:radial-gradient(circle,rgba(160,0,0,.55),rgba(0,0,0,.2));filter:drop-shadow(0 0 30px #f00)}
+.fx.save{background:radial-gradient(circle,rgba(30,170,80,.5),rgba(0,0,0,.1));filter:drop-shadow(0 0 30px #2f6)}
+@keyframes fxIn{0%{opacity:0;transform:scale(.3)}20%{opacity:1;transform:scale(1.15)}35%{transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:scale(1.1)}}
 .enter .flip{animation:flip .8s cubic-bezier(.2,.9,.3,1.2) both}
 .flip{animation:none}
 @keyframes shake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
@@ -125,6 +129,13 @@ function decorate(g) {
   [...$app.children].forEach((c, i) => c.style.setProperty('--i', Math.min(i, 12)));
   $app.classList.remove('enter'); void $app.offsetWidth; $app.classList.add('enter');
   if (phase === 'over') { if (g.winner === 'city') confetti(); }
+  if (phase === 'day' && (g.event === 'kill' || g.event === 'save')) {
+    const f = document.createElement('div');
+    f.className = 'fx ' + g.event;
+    f.textContent = g.event === 'kill' ? '💀' : '🛡️';
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 2100);
+  }
 }
 
 function render() {
