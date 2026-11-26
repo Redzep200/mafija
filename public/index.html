@@ -148,6 +148,7 @@ function render() {
   else renderOver(g);
   decorate(g);
   const bar = document.createElement('div');
+  const stale = document.getElementById('ab'); if (stale) stale.remove();
   bar.style.marginTop = '24px';
   if (!g) {
     bar.innerHTML = '<button class="sec big" id="rs">Restart stats</button>';
@@ -156,8 +157,9 @@ function render() {
       if (confirm('Resetovati statistiku svih igrača na 0?')) act('/api/reset_stats');
     };
   } else if (g.phase !== 'over') {
-    bar.innerHTML = '<button id="ab" title="Prekini igru" style="position:fixed;right:8px;bottom:8px;width:34px;height:34px;padding:0;border-radius:50%;background:#2a2735;color:#666;font-size:16px;opacity:.6">🔄</button>';
-    $app.appendChild(bar);
+    const old = document.getElementById('ab'); if (old) old.remove();
+    bar.innerHTML = '<button id="ab" title="Prekini igru" style="position:fixed;right:8px;bottom:8px;width:34px;height:34px;padding:0;margin:0;border-radius:50%;background:#2a2735;color:#666;font-size:16px;opacity:.6;z-index:30">🔄</button>';
+    document.body.appendChild(bar.firstChild);
     document.getElementById('ab').onclick = () => {
       if (confirm('Prekinuti igru? Statistika se neće upisati.')) { N = null; revealed = null; votePick = null; handed = false; act('/api/end'); }
     };
