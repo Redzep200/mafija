@@ -134,9 +134,8 @@ function renderReveal(g) {
       revealed = (await api('/api/reveal', {})).role; render();
     };
   } else if (p.name.trim().toLowerCase() === 'nihad' && donkeyShownFor !== p.id) {
-    $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role">🫏 Magarac</div>
-    <button class="big" id="dk">Prikaži moju ulogu</button>`;
-    document.getElementById('dk').onclick = () => { donkeyShownFor = p.id; render(); };
+    $app.innerHTML = `<h2>${esc(p.name)}</h2>    <div class="role">🫏 Magarac</div>`;
+    setTimeout(() => { donkeyShownFor = p.id; render(); }, 1000);
   } else {
     const m = revealed === 'mafia' || revealed === 'dama';
     $app.innerHTML = `<h2>${esc(p.name)}</h2><div class="role ${m ? 'mafia' : 'city'}">${ROLE[revealed]}</div>
