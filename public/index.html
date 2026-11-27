@@ -191,6 +191,10 @@ function renderSetup() {
   <div class="card"><div class="row"><span>Broj obične mafije (uz damu)</span>
     <input id="mf" type="number" min="1" value="${mafiaN}" style="width:80px"></div>
     <small>Uvijek je 1 dama, 1 doktor, 1 policajac. Igrača: ${sel.size}</small></div>
+  <div class="card"><label class="row" style="cursor:pointer"><span>⏱️ Tajmer rasprave (dan)</span>
+    <input id="tOn" type="checkbox" style="width:auto" ${TM.on ? 'checked' : ''}></label>
+    <div class="row" style="margin-top:8px;${TM.on ? '' : 'display:none'}" id="tRow"><span>Trajanje (minuta)</span>
+    <input id="tMin" type="number" min="1" max="60" value="${TM.min}" style="width:80px"></div></div>
   <button class="big" id="start">Počni igru</button><p class="err">${esc(err)}</p>`;
   document.getElementById('add').onclick = () => {
     const el = document.getElementById('nm');
@@ -205,10 +209,17 @@ function renderSetup() {
     if (confirm('Obrisati ' + p.name + '?')) { sel.delete(p.id); act('/api/delete', {id: p.id}); }
   });
   document.getElementById('mf').onchange = e => { mafiaN = parseInt(e.target.value) || 1; };
+  document.getElementById('tOn').onchange = e => {
+    TM.on = e.target.checked; tmSave();
+    document.getElementById('tRow').style.display = TM.on ? '' : 'none';
+  };
+  document.getElementById('tMin').onchange = e => {
+    TM.min = Math.min(60, Math.max(1, parseInt(e.target.value) || 3)); e.target.value = TM.min; tmSave();
+  };
   document.getElementById('start').onclick = () => {
     mafiaN = parseInt(document.getElementById('mf').value) || 1;
     const ids = S.players.filter(p => sel.has(p.id)).map(p => p.id);
-    revealed = null;
+    revealed = null; TM.round = null; TM.end = null;
     act('/api/start', {ids, mafia: mafiaN});
   };
 }
@@ -291,6 +302,50 @@ function renderNight(g) {
   document.getElementById('skip').onclick = () => go(true);
 }
 
+let TM = {on: false, min: 3, round: null, end: null, left: null};
+try { Object.assign(TM, JSON.parse(localStorage.getItem('mafijaTimer') || '{}')); } catch (e) {}
+const tmSave = () => localStorage.setItem('mafijaTimer', JSON.stringify({on: TM.on, min: TM.min}));
+let tmInt = null;
+const fmt = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+function tmBeep() {
+  try {
+    if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+    const c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator();
+    o.connect(c.destination); o.frequency.value = 880; o.start(); o.stop(c.currentTime + 0.6);
+  } catch (e) {}
+}
+function tmTick() {
+  const el = document.getElementById('tm');
+  if (!el) { clearInterval(tmInt); tmInt = null; return; }
+  if (TM.end) {
+    const left = Math.max(0, Math.ceil((TM.end - Date.now()) / 1000));
+    TM.left = left;
+    if (left === 0) { TM.end = null; tmBeep(); }
+  }
+  el.textContent = TM.left === 0 ? '⏰ Vrijeme je isteklo!' : fmt(TM.left);
+  el.classList.toggle('mafia', TM.left <= 10);
+  const b = document.getElementById('tmBtn');
+  if (b) b.textContent = TM.end ? '⏸️ Pauza' : (TM.left === TM.min * 60 ? '▶️ Start' : TM.left === 0 ? '🔁 Ponovo' : '▶️ Nastavi');
+}
+function tmBox(g) {
+  if (!TM.on) return '';
+  if (TM.round !== g.round) { TM.round = g.round; TM.end = null; TM.left = TM.min * 60; }
+  if (!tmInt) tmInt = setInterval(tmTick, 250);
+  return `<div class="card" style="text-align:center"><div class="role" id="tm" style="font-size:40px;margin:4px 0"></div>
+  <button id="tmBtn" class="sec"></button> <button id="tmRst" class="sec">↺</button></div>`;
+}
+function tmBind() {
+  const b = document.getElementById('tmBtn');
+  if (!b) return;
+  b.onclick = () => {
+    if (TM.end) TM.end = null;
+    else { if (TM.left === 0) TM.left = TM.min * 60; TM.end = Date.now() + TM.left * 1000; }
+    tmTick();
+  };
+  document.getElementById('tmRst').onclick = () => { TM.end = null; TM.left = TM.min * 60; tmTick(); };
+  tmTick();
+}
+
 let votePick = null;
 function renderDay(g) {
   const alive = g.players.filter(p => p.alive);
@@ -298,12 +353,14 @@ function renderDay(g) {
   $app.innerHTML = `<h2>☀️ Dan ${g.round}</h2>
   <div class="card">${g.log.map(esc).join('<br>')}</div>
   ${sil ? `<div class="card shake">🤐 <b>${esc(sil.name)}</b> ne može glasati.</div>` : ''}
+  ${tmBox(g)}
   <h3>Ko je izglasan?</h3>
   ${alive.map(p => `<button class="pick ${votePick === p.id ? 'sel' : ''}" data-id="${p.id}">${esc(p.name)}</button>`).join('')}
   <button class="big" id="ok">Potvrdi glasanje</button>
   <button class="sec big" id="none">Niko nije izglasan</button>
   <h3>Pregled uloga (vođa)</h3>
   ${g.players.map(p => `<div class="card row ${p.alive ? '' : 'dead'}"><b>${esc(p.name)}</b><span class="${p.role === 'mafia' || p.role === 'dama' ? 'mafia' : 'city'}">${ROLE_SHORT[p.role]}</span></div>`).join('')}`;
+  tmBind();
   $app.querySelectorAll('.pick').forEach(b => b.onclick = () => { votePick = b.dataset.id; render(); });
   document.getElementById('ok').onclick = () => { const t = votePick; votePick = null; act('/api/vote', {target: t}); };
   document.getElementById('none').onclick = () => { votePick = null; act('/api/vote', {target: null}); };
